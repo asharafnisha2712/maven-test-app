@@ -1,0 +1,89 @@
+pipeline:
+  name: Maven CI and Security Scan
+  identifier: maven_test_app_ci
+  projectIdentifier: YOUR_PROJECT_ID
+  orgIdentifier: YOUR_ORG_ID
+  properties:
+    ci:
+      codebase:
+        connectorRef: YOUR_GITHUB_CONNECTOR
+        repoName: asharafnisha2712/maven-test-app
+        build:
+          type: branch
+          spec:
+            branch: <+input>
+  stages:
+    - stage:
+        name: Build, Test and Scan
+        identifier: Build_Test_Scan
+        type: CI
+        spec:
+          cloneCodebase: true
+          sharedPaths:
+            - /var/run
+            - /var/lib/docker
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Maven Build and Tests
+                  identifier: Maven_Build_and_Tests
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9.9-eclipse-temurin-17
+                    shell: Sh
+                    command: mvn --batch-mode --no-transfer-progress clean verify
+              - step:
+                  type: Run
+                  name: Trivy Source Scan
+                  identifier: Trivy_Source_Scan
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: aquasec/trivy:0.76.0
+                    shell: Sh
+                    command: |-
+                      trivy fs --scanners vuln,secret --exit-code 1 --severity HIGH,CRITICAL .
+                      trivy config --exit-code 1 --severity HIGH,CRITICAL Dockerfile
+              - step:
+                  type: Run
+                  name: Build Docker Image
+                  identifier: Build_Docker_Image
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: docker:29-cli
+                    shell: Sh
+                    command: |-
+                      for attempt in $(seq 1 30); do
+                        if docker info >/dev/null 2>&1; then
+                          docker build --tag maven-test-app:ci .
+                          exit $?
+                        fi
+                        sleep 1
+                      done
+                      echo "Docker daemon did not become ready within 30 seconds" >&2
+                      exit 1
+              - step:
+                  type: Run
+                  name: Trivy Image Scan
+                  identifier: Trivy_Image_Scan
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: aquasec/trivy:0.76.0
+                    shell: Sh
+                    command: trivy image --ignore-unfixed --exit-code 1 --severity HIGH,CRITICAL maven-test-app:ci
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          serviceDependencies:
+            - identifier: docker_dind
+              name: Docker in Docker
+              type: Service
+              spec:
+                connectorRef: account.harnessImage
+                image: docker:29-dind
+                privileged: true
+                entrypoint:
+                  - dockerd

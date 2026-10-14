@@ -1,0 +1,7 @@
+.git
+.harness
+.idea
+.vscode
+README.md
+target/*
+!target/maven-test-app-1.0.0.jar
