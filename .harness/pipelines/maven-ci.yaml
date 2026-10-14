@@ -8,10 +8,7 @@ pipeline:
       codebase:
         connectorRef: YOUR_GITHUB_CONNECTOR
         repoName: asharafnisha2712/maven-test-app
-        build:
-          type: branch
-          spec:
-            branch: <+input>
+        build: <+input>
   stages:
     - stage:
         name: Build, Test and Scan
